@@ -678,7 +678,9 @@ function renderCharts() {
   if (DB.length === 0) return;
   var sorted = DB.slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
   var labels = sorted.map(function(e){ return e.date.slice(5); });
-
+  //ajout point zero poids
+  labels.unshift('J0');
+  sorted.unshift({ poids: poidsDepart, kcal: null, gluc: null, prot: null, lipi: null });
   // ── COMBO : Poids (axe gauche) + Kcal + Glucides (axes droits) ──
   destroyChart('chart-combo');
   var ctx0 = document.getElementById('chart-combo');
@@ -890,7 +892,14 @@ function importBackup(event) {
   };
   reader.readAsText(file);
 }
-
+// ajout point zero du poids
+    function addStartingPoint(sorted, labels, datasets) {
+  if (!poidsDepart) return;
+  labels.unshift('J0');
+  datasets[0].data.unshift(poidsDepart);
+  datasets[1].data.unshift(null);
+  datasets[2].data.unshift(null);
+}
 // Hook into switchTab - robust chart rendering
 var _origSwitchTab = switchTab;
 switchTab = function(name, btn) {
