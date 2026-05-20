@@ -559,6 +559,8 @@ function submitEntry(){
   var idx=document.getElementById('edit-idx').value;
   if(idx!==''){DB[parseInt(idx)]=entry;}else{DB.push(entry);}
   dbSave(); render(); resetForm();
+  // Auto-save recipe if recipes field filled
+  if (entry.recipes) autoSaveRecipe(entry);
 }
 
 // ── EDIT ──
@@ -795,6 +797,33 @@ function renderCharts() {
 }
 
 
+
+// ── AUTO-SAVE RECIPE ──
+function smartRecipeName(entry) {
+  if (!entry.recipes) return 'Repas du ' + entry.date;
+  var lines = entry.recipes.split('\n').filter(function(l){ return l.trim(); });
+  if (!lines.length) return 'Repas du ' + entry.date;
+  // Take first line, strip emoji and leading symbols
+  var first = lines[0].replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu,'').replace(/^[^a-zA-ZÀ-ÿ0-9]+/,'').trim();
+  // Take first meaningful segment (before +)
+  var seg = first.split('+')[0].trim();
+  // Capitalize
+  seg = seg.charAt(0).toUpperCase() + seg.slice(1);
+  // Add date short
+  var d = entry.date ? entry.date.slice(5) : '';
+  return seg ? seg + ' · ' + d : 'Repas du ' + entry.date;
+}
+
+function autoSaveRecipe(entry) {
+  if (!entry.recipes || !entry.recipes.trim()) return;
+  var name = smartRecipeName(entry);
+  var existing = RECIPES.findIndex(function(r){ return r.name === name; });
+  var rec = { name:name, kcal:entry.kcal||0, gluc:entry.gluc||0, prot:entry.prot||0, lipi:entry.lipi||0, body:entry.recipes };
+  if (existing >= 0) { RECIPES[existing] = rec; } else { RECIPES.push(rec); }
+  recSave();
+  renderRecipes();
+}
+
 // ── EXPORT BACKUP ──
 function exportBackup() {
   var backup = {
@@ -827,9 +856,7 @@ function importBackup(event) {
 
       var msg = 'Importer ' + backup.journal.length + ' journée(s)';
       if (backup.recettes) msg += ' + ' + backup.recettes.length + ' recette(s)';
-      msg += ' ?
-
-ATTENTION : cela remplacera toutes les données actuelles.';
+      msg += ' ?\nATTENTION : cela remplacera toutes les données actuelles.';
       if (!confirm(msg)) return;
 
       // Restore all data
@@ -843,6 +870,15 @@ ATTENTION : cela remplacera toutes les données actuelles.';
       dbSave(); recSave();
       render(); renderRecipes();
 
+      // Auto-save all recipes from journal entries
+      DB.forEach(function(entry){ autoSaveRecipe(entry); });
+
+      // Force charts refresh after import
+      setTimeout(function(){
+        var cp = document.getElementById('tab-charts');
+        if (cp && cp.classList.contains('active')) renderCharts();
+      }, 300);
+
       var msgEl = document.getElementById('backup-msg');
       msgEl.textContent = '✅ ' + DB.length + ' journées restaurées !';
       setTimeout(function(){ msgEl.textContent=''; }, 5000);
@@ -855,11 +891,20 @@ ATTENTION : cela remplacera toutes les données actuelles.';
   reader.readAsText(file);
 }
 
-// Hook into switchTab
+// Hook into switchTab - robust chart rendering
 var _origSwitchTab = switchTab;
 switchTab = function(name, btn) {
   _origSwitchTab(name, btn);
-  if (name === 'charts') { setTimeout(renderCharts, 60); }
+  if (name === 'charts') {
+    // Double timeout to ensure DOM is ready after tab switch
+    setTimeout(function(){
+      if (DB && DB.length > 0) {
+        renderCharts();
+      } else {
+        document.getElementById('tab-charts').innerHTML += '<p style="color:var(--muted);text-align:center;padding:2rem;font-size:.85rem;">Aucune donnée — importe tes journées via le bouton 📥</p>';
+      }
+    }, 100);
+  }
 };
 
 // Re-render if charts tab active after data change
@@ -867,7 +912,7 @@ var _origRender = render;
 render = function() {
   _origRender();
   var cp = document.getElementById('tab-charts');
-  if (cp && cp.classList.contains('active')) { setTimeout(renderCharts, 60); }
+  if (cp && cp.classList.contains('active')) { setTimeout(renderCharts, 100); }
 };
 </script>
 
