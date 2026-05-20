@@ -650,6 +650,17 @@ async function getSuggestions(){
 dbLoad(); recLoad(); pdLoad();
 document.getElementById('inp-date').value=new Date().toISOString().split('T')[0];
 render(); renderRecipes();
+
+// Restore last active tab
+try {
+  var lastTab = localStorage.getItem('active_tab');
+  if (lastTab && lastTab !== 'journal') {
+    var btn = document.querySelector('.tab-btn[onclick*="' + lastTab + '"]');
+    if (btn) {
+      switchTab(lastTab, btn);
+    }
+  }
+} catch(ex){}
 </script>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
@@ -678,9 +689,13 @@ function renderCharts() {
   if (DB.length === 0) return;
   var sorted = DB.slice().sort(function(a,b){ return a.date.localeCompare(b.date); });
   var labels = sorted.map(function(e){ return e.date.slice(5); });
-  //ajout point zero poids
-  labels.unshift('J0');
-  sorted.unshift({ poids: poidsDepart, kcal: null, gluc: null, prot: null, lipi: null });
+  // Add J0 starting point if poidsDepart is set
+  var pd = poidsDepart || parseFloat(localStorage.getItem('nutrition_pd2'));
+  if (pd) {
+    labels.unshift('J0');
+    sorted.unshift({ poids: pd, kcal: null, gluc: null, prot: null, lipi: null });
+  }
+
   // ── COMBO : Poids (axe gauche) + Kcal + Glucides (axes droits) ──
   destroyChart('chart-combo');
   var ctx0 = document.getElementById('chart-combo');
@@ -892,26 +907,15 @@ function importBackup(event) {
   };
   reader.readAsText(file);
 }
-// ajout point zero du poids
-    function addStartingPoint(sorted, labels, datasets) {
-  if (!poidsDepart) return;
-  labels.unshift('J0');
-  datasets[0].data.unshift(poidsDepart);
-  datasets[1].data.unshift(null);
-  datasets[2].data.unshift(null);
-}
-// Hook into switchTab - robust chart rendering
+
+// Hook into switchTab - robust chart rendering + remember active tab
 var _origSwitchTab = switchTab;
 switchTab = function(name, btn) {
   _origSwitchTab(name, btn);
+  try { localStorage.setItem('active_tab', name); } catch(ex){}
   if (name === 'charts') {
-    // Double timeout to ensure DOM is ready after tab switch
     setTimeout(function(){
-      if (DB && DB.length > 0) {
-        renderCharts();
-      } else {
-        document.getElementById('tab-charts').innerHTML += '<p style="color:var(--muted);text-align:center;padding:2rem;font-size:.85rem;">Aucune donnée — importe tes journées via le bouton 📥</p>';
-      }
+      if (DB && DB.length > 0) { renderCharts(); }
     }, 100);
   }
 };
