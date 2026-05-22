@@ -696,7 +696,15 @@ function renderCharts() {
     sorted.unshift({ poids: pd, kcal: null, gluc: null, prot: null, lipi: null });
   }
 
-  // ── COMBO : Poids (axe gauche) + Kcal + Glucides (axes droits) ──
+  // ── COMBO : Poids + Kcal consommées + Kcal brûlées + Glucides ──
+  var BASE_KCAL  = 2600;
+  var ADD_MARCHE = 500;
+  var ADD_SPORT  = 750;
+  function kCalBrulees(e) {
+    if (e.activite === 'marche') return BASE_KCAL + ADD_MARCHE;
+    if (e.activite === 'sport')  return BASE_KCAL + ADD_SPORT;
+    return BASE_KCAL;
+  }
   destroyChart('chart-combo');
   var ctx0 = document.getElementById('chart-combo');
   if (ctx0) {
@@ -705,27 +713,65 @@ function renderCharts() {
       data: {
         labels: labels,
         datasets: [
-          { label:'Poids (kg)', data: sorted.map(function(e){ return e.poids||null; }), spanGaps:true,
+          { label:'Poids (kg)',
+            data: sorted.map(function(e){ return e.poids||null; }), spanGaps:true,
             borderColor: COLORS.accent2, backgroundColor: hexToRgba('#7ab87a',0.08),
             fill:true, tension:0.4, pointRadius:5, pointBackgroundColor: COLORS.accent2,
             yAxisID:'yPoids', type:'line' },
-          { label:'Kcal', data: sorted.map(function(e){ return e.kcal||null; }), spanGaps:true,
-            borderColor: COLORS.accent, backgroundColor: hexToRgba('#c8a96e',0.08),
-            fill:false, tension:0.4, pointRadius:5, pointBackgroundColor: COLORS.accent,
-            yAxisID:'yKcal', type:'line' },
-          { label:'Glucides (g)', data: sorted.map(function(e){ return e.gluc||null; }),
+          { label:'Kcal consommées',
+            data: sorted.map(function(e){ return e.kcal||null; }), spanGaps:true,
+            borderColor: COLORS.accent, backgroundColor: hexToRgba('#c8a96e',0.05),
+            fill:false, tension:0.3, pointRadius:5, pointBackgroundColor: COLORS.accent,
+            borderWidth:2, yAxisID:'yKcal', type:'line' },
+          { label:'Kcal brûlées',
+            data: sorted.map(function(e){ return kCalBrulees(e); }),
+            borderColor: COLORS.danger, backgroundColor: 'transparent',
+            fill:false, tension:0, pointRadius:5, pointBackgroundColor: COLORS.danger,
+            borderWidth:2, borderDash:[6,3], yAxisID:'yKcal', type:'line' },
+          { label:'Glucides (g)',
+            data: sorted.map(function(e){ return e.gluc||null; }),
             backgroundColor: hexToRgba('#6eafc8',0.7), borderColor: COLORS.accent3,
             borderWidth:1, borderRadius:6, yAxisID:'yGluc', type:'bar' }
         ]
       },
       options: {
         responsive:true, interaction:{ intersect:false, mode:'index' },
-        plugins:{ legend:BASE_LEGEND, tooltip: BASE_TOOLTIP },
+        plugins:{
+          legend: BASE_LEGEND,
+          tooltip: {
+            backgroundColor:'#1a1a18', borderColor:'#2e2e2a', borderWidth:1,
+            titleColor:'#c8a96e', bodyColor:'#e8e4dc',
+            callbacks: {
+              afterBody: function(items) {
+                var cons = null, brule = null;
+                items.forEach(function(item){
+                  if (item.dataset.label === 'Kcal consommées') cons = item.parsed.y;
+                  if (item.dataset.label === 'Kcal brûlées') brule = item.parsed.y;
+                });
+                if (cons !== null && brule !== null) {
+                  var diff = Math.round(cons - brule);
+                  return [diff <= 0 ? '▼ Déficit : ' + Math.abs(diff) + ' kcal' : '▲ Surplus : ' + diff + ' kcal'];
+                }
+                return [];
+              }
+            }
+          }
+        },
         scales: {
           x: BASE_SCALES.x,
-          yPoids: { type:'linear', position:'left',  ticks:{ color: COLORS.accent2, font:{family:'DM Mono',size:10}, callback:function(v){return v+' kg';} }, grid:{ color:'#2e2e2a' }, title:{ display:true, text:'kg', color: COLORS.accent2, font:{size:10} } },
-          yKcal:  { type:'linear', position:'right', ticks:{ color: COLORS.accent,  font:{family:'DM Mono',size:10}, callback:function(v){return v+' kc';} }, grid:{ drawOnChartArea:false }, title:{ display:true, text:'kcal', color: COLORS.accent, font:{size:10} } },
-          yGluc:  { type:'linear', position:'right', ticks:{ color: COLORS.accent3, font:{family:'DM Mono',size:10}, callback:function(v){return v+'g';} }, grid:{ drawOnChartArea:false }, title:{ display:true, text:'gluc', color: COLORS.accent3, font:{size:10} } }
+          yPoids: { type:'linear', position:'left',
+            ticks:{ color: COLORS.accent2, font:{family:'DM Mono',size:10}, callback:function(v){return v.toFixed(1)+' kg';} },
+            grid:{ color:'#2e2e2a' },
+            title:{ display:true, text:'kg', color: COLORS.accent2, font:{size:10} } },
+          yKcal: { type:'linear', position:'right',
+            min:800, max:4000,
+            ticks:{ color: COLORS.accent, font:{family:'DM Mono',size:10}, callback:function(v){return Math.round(v)+'';} },
+            grid:{ drawOnChartArea:false },
+            title:{ display:true, text:'kcal', color: COLORS.accent, font:{size:10} } },
+          yGluc: { type:'linear', position:'right',
+            ticks:{ color: COLORS.accent3, font:{family:'DM Mono',size:10}, callback:function(v){return v+'g';} },
+            grid:{ drawOnChartArea:false },
+            title:{ display:true, text:'gluc', color: COLORS.accent3, font:{size:10} } }
         }
       }
     });
